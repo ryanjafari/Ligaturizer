@@ -23,6 +23,7 @@ COPYRIGHT = '''
 Programming ligatures added by Ilya Skriblovsky from FiraCode
 FiraCode Copyright (c) 2015 by Nikita Prokopov'''
 
+
 def get_ligature_source(fontname):
     # Become case-insensitive
     fontname = fontname.lower()
@@ -37,10 +38,9 @@ def get_ligature_source(fontname):
         return 'fonts/fira/distr/otf/FiraCode-Bold.otf'
     return 'fonts/fira/distr/otf/FiraCode-Regular.otf'
 
-class LigatureCreator(object):
 
-    def __init__(self, font, firacode,
-                 scale_character_glyphs_threshold,
+class LigatureCreator(object):
+    def __init__(self, font, firacode, scale_character_glyphs_threshold,
                  copy_character_glyphs):
         self.font = font
         self.firacode = firacode
@@ -87,14 +87,14 @@ class LigatureCreator(object):
             # Fix horizontal advance first, to recalculate the bearings.
             glyph.width = self.emwidth
             # Correct bearings to center the glyph.
-            glyph.left_side_bearing = (glyph.left_side_bearing + glyph.right_side_bearing) / 2
+            glyph.left_side_bearing = (glyph.left_side_bearing +
+                                       glyph.right_side_bearing) / 2
             glyph.right_side_bearing = glyph.left_side_bearing
 
         # Final adjustment of horizontal advance to correct for rounding
         # errors when scaling/centering -- otherwise small errors can result
         # in visible misalignment near the end of long lines.
         glyph.width = self.emwidth
-
 
     def copy_character_glyphs(self, chars):
         """Copy individual (non-ligature) characters from the ligature font."""
@@ -151,7 +151,8 @@ class LigatureCreator(object):
         self.font.copy()
 
         lookup_name = lambda i: 'lookup.{}.{}'.format(self._lig_counter, i)
-        lookup_sub_name = lambda i: 'lookup.sub.{}.{}'.format(self._lig_counter, i)
+        lookup_sub_name = lambda i: 'lookup.sub.{}.{}'.format(
+            self._lig_counter, i)
         cr_name = lambda i: 'CR.{}.{}'.format(self._lig_counter, i)
 
         for i, char in enumerate(input_chars):
@@ -175,50 +176,50 @@ class LigatureCreator(object):
                 self.font[char].addPosSub(lookup_sub_name(i), ligature_name)
 
         calt_lookup_name = 'calt.{}'.format(self._lig_counter)
-        self.font.addLookup(calt_lookup_name, 'gsub_contextchain', (),
-            (('calt', (('DFLT', ('dflt',)),
-                       ('arab', ('dflt',)),
-                       ('armn', ('dflt',)),
-                       ('cyrl', ('SRB ', 'dflt')),
-                       ('geor', ('dflt',)),
-                       ('grek', ('dflt',)),
-                       ('lao ', ('dflt',)),
-                       ('latn', ('CAT ', 'ESP ', 'GAL ', 'ISM ', 'KSM ', 'LSM ', 'MOL ', 'NSM ', 'ROM ', 'SKS ', 'SSM ', 'dflt')),
-                       ('math', ('dflt',)),
-                       ('thai', ('dflt',)))),))
+        self.font.addLookup(
+            calt_lookup_name, 'gsub_contextchain', (),
+            (('calt',
+              (('DFLT', ('dflt', )), ('arab', ('dflt', )),
+               ('armn', ('dflt', )), ('cyrl', ('SRB ', 'dflt')), ('geor',
+                                                                  ('dflt', )),
+               ('grek', ('dflt', )), ('lao ', ('dflt', )),
+               ('latn', ('CAT ', 'ESP ', 'GAL ', 'ISM ', 'KSM ', 'LSM ',
+                         'MOL ', 'NSM ', 'ROM ', 'SKS ', 'SSM ', 'dflt')),
+               ('math', ('dflt', )), ('thai', ('dflt', )))), ))
         #print('CALT %s (%s)' % (calt_lookup_name, firacode_ligature_name))
         for i, char in enumerate(input_chars):
-            self.add_calt(calt_lookup_name, 'calt.{}.{}'.format(self._lig_counter, i),
-                '{prev} | {cur} @<{lookup}> | {next}',
-                prev = ' '.join(cr_name(j) for j in range(i)),
-                cur = char,
-                lookup = lookup_name(i),
-                next = ' '.join(input_chars[i+1:]))
+            self.add_calt(calt_lookup_name,
+                          'calt.{}.{}'.format(self._lig_counter, i),
+                          '{prev} | {cur} @<{lookup}> | {next}',
+                          prev=' '.join(cr_name(j) for j in range(i)),
+                          cur=char,
+                          lookup=lookup_name(i),
+                          next=' '.join(input_chars[i + 1:]))
 
         # Add ignore rules
-        self.add_calt(calt_lookup_name, 'calt.{}.{}'.format(self._lig_counter, i+1),
-            '| {first} | {rest} {last}',
-            first = input_chars[0],
-            rest = ' '.join(input_chars[1:]),
-            last = input_chars[-1])
-        self.add_calt(calt_lookup_name, 'calt.{}.{}'.format(self._lig_counter, i+2),
-            '{first} | {first} | {rest}',
-            first = input_chars[0],
-            rest = ' '.join(input_chars[1:]))
+        self.add_calt(calt_lookup_name,
+                      'calt.{}.{}'.format(self._lig_counter, i + 1),
+                      '| {first} | {rest} {last}',
+                      first=input_chars[0],
+                      rest=' '.join(input_chars[1:]),
+                      last=input_chars[-1])
+        self.add_calt(calt_lookup_name,
+                      'calt.{}.{}'.format(self._lig_counter, i + 2),
+                      '{first} | {first} | {rest}',
+                      first=input_chars[0],
+                      rest=' '.join(input_chars[1:]))
 
     def add_calt(self, calt_name, subtable_name, spec, **kwargs):
         spec = spec.format(**kwargs)
         #print('    %s: %s ' % (subtable_name, spec))
-        self.font.addContextualSubtable(calt_name, subtable_name, 'glyph', spec)
+        self.font.addContextualSubtable(calt_name, subtable_name, 'glyph',
+                                        spec)
 
 
 def replace_sfnt(font, key, value):
-    font.sfnt_names = tuple(
-        (row[0], key, value)
-        if row[1] == key
-        else row
-        for row in font.sfnt_names
-    )
+    font.sfnt_names = tuple((row[0], key, value) if row[1] == key else row
+                            for row in font.sfnt_names)
+
 
 def update_font_metadata(font, new_name):
     # Figure out the input font's real name (i.e. without a hyphenated suffix)
@@ -239,8 +240,8 @@ def update_font_metadata(font, new_name):
         font.fullname = new_name
         font.fontname = new_name.replace(' ', '')
 
-    print("Ligaturizing font %s (%s) as '%s'" % (
-        path.basename(font.path), old_name, new_name))
+    print("Ligaturizing font %s (%s) as '%s'" %
+          (path.basename(font.path), old_name, new_name))
 
     font.copyright += COPYRIGHT
     replace_sfnt(font, 'UniqueID', '%s; Ligaturized' % font.fullname)
@@ -248,6 +249,7 @@ def update_font_metadata(font, new_name):
     replace_sfnt(font, 'Compatible Full', new_name)
     replace_sfnt(font, 'Family', new_name)
     replace_sfnt(font, 'WWS Family', new_name)
+
 
 def ligaturize_font(input_font_file, output_dir, ligature_font_file,
                     output_name, prefix, **kwargs):
@@ -270,9 +272,10 @@ def ligaturize_font(input_font_file, output_dir, ligature_font_file,
 
     creator = LigatureCreator(font, firacode, **kwargs)
     ligature_length = lambda lig: len(lig['chars'])
-    for lig_spec in sorted(ligatures, key = ligature_length):
+    for lig_spec in sorted(ligatures, key=ligature_length):
         try:
-            creator.add_ligature(lig_spec['chars'], lig_spec['firacode_ligature_name'])
+            creator.add_ligature(lig_spec['chars'],
+                                 lig_spec['firacode_ligature_name'])
         except Exception as e:
             print('Exception while adding ligature: {}'.format(lig_spec))
             raise
@@ -298,41 +301,56 @@ def parse_args():
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument("input_font_file",
-        help="The TTF or OTF font to add ligatures to.")
-    parser.add_argument("--output-dir",
+                        help="The TTF or OTF font to add ligatures to.")
+    parser.add_argument(
+        "--output-dir",
         help="The directory to save the ligaturized font in. The actual filename"
-             " will be automatically generated based on the input font name and"
-             " the --prefix and --output-name flags.")
-    parser.add_argument("--ligature-font-file",
-        type=str, default='', metavar='PATH',
+        " will be automatically generated based on the input font name and"
+        " the --prefix and --output-name flags.")
+    parser.add_argument(
+        "--ligature-font-file",
+        type=str,
+        default='',
+        metavar='PATH',
         help="The file to copy ligatures from. If unspecified, ligaturize will"
-             " attempt to pick a suitable one from fonts/fira/distr/otf/ based on the input"
-             " font's weight.")
-    parser.add_argument("--copy-character-glyphs",
-        default=False, action='store_true',
+        " attempt to pick a suitable one from fonts/fira/distr/otf/ based on the input"
+        " font's weight.")
+    parser.add_argument(
+        "--copy-character-glyphs",
+        default=False,
+        action='store_true',
         help="Copy glyphs for (some) individual characters from the ligature"
-             " font as well. This will result in punctuation that matches the"
-             " ligatures more closely, but may not fit in as well with the rest"
-             " of the font.")
-    parser.add_argument("--scale-character-glyphs-threshold",
-        type=float, default=0.1, metavar='THRESHOLD',
+        " font as well. This will result in punctuation that matches the"
+        " ligatures more closely, but may not fit in as well with the rest"
+        " of the font.")
+    parser.add_argument(
+        "--scale-character-glyphs-threshold",
+        type=float,
+        default=0.1,
+        metavar='THRESHOLD',
         help="When copying character glyphs, if they differ in width from the"
-             " width of the input font by at least this much, scale them"
-             " horizontally to match the input font even if this noticeably"
-             " changes their aspect ratio. The default (0.1) means to scale if"
-             " they are at least 10%% wider or narrower. A value of 0 will scale"
-             " all copied character glyphs; a value of 2 effectively disables"
-             " character glyph scaling.")
-    parser.add_argument("--prefix",
-        type=str, default="Liga",
+        " width of the input font by at least this much, scale them"
+        " horizontally to match the input font even if this noticeably"
+        " changes their aspect ratio. The default (0.1) means to scale if"
+        " they are at least 10%% wider or narrower. A value of 0 will scale"
+        " all copied character glyphs; a value of 2 effectively disables"
+        " character glyph scaling.")
+    parser.add_argument(
+        "--prefix",
+        type=str,
+        default="Liga",
         help="String to prefix the name of the generated font with.")
-    parser.add_argument("--output-name",
-        type=str, default="",
+    parser.add_argument(
+        "--output-name",
+        type=str,
+        default="",
         help="Name of the generated font. Completely replaces the original.")
     return parser.parse_args()
 
+
 def main():
     ligaturize_font(**vars(parse_args()))
+
 
 if __name__ == '__main__':
     main()
