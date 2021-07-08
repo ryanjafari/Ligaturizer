@@ -12,7 +12,7 @@
 import fontforge
 import psMat
 import os
-from os import path
+from os import path, replace
 import sys
 
 from ligatures import ligatures
@@ -30,13 +30,13 @@ def get_ligature_source(fontname):
     for weight in ['Bold', 'Retina', 'Medium', 'Regular', 'Light']:
         if fontname.endswith('-' + weight.lower()):
             # Exact match for one of the Fira Code weights
-            return 'fonts/fira/distr/otf/FiraCode-%s.otf' % weight
+            return 'modules/fira/distr/otf/FiraCode-%s.otf' % weight
 
     # No exact match. Guess that we want 'Bold' if the font name has 'bold' or
     # 'heavy' in it, and 'Regular' otherwise.
     if 'bold' in fontname or 'heavy' in fontname:
-        return 'fonts/fira/distr/otf/FiraCode-Bold.otf'
-    return 'fonts/fira/distr/otf/FiraCode-Regular.otf'
+        return 'modules/fira/distr/otf/FiraCode-Bold.otf'
+    return 'modules/fira/distr/otf/FiraCode-Regular.otf'
 
 
 class LigatureCreator(object):
@@ -221,57 +221,90 @@ def replace_sfnt(font, key, value):
                             for row in font.sfnt_names)
 
 
-def update_font_metadata(font, new_name):
-    # Figure out the input font's real name (i.e. without a hyphenated suffix)
-    # and hyphenated suffix (if present)
-    old_name = font.familyname
-    try:
-        suffix = font.fontname.split('-')[1]
-    except IndexError:
-        suffix = None
+def ligaturize_font(in_file_path, out_dir):
+    font = fontforge.open(in_file_path)
+    liga_font_file = get_ligature_source(font.fontname)
+    liga_font = fontforge.open(liga_font_file)
+    out_file_path = update_font_names(font, in_file_path, out_dir)
 
-    # Replace the old name with the new name whether or not a suffix was present.
-    # If a suffix was present, append it accordingly.
-    font.familyname = new_name
-    if suffix:
-        font.fullname = "%s %s" % (new_name, suffix)
-        font.fontname = "%s-%s" % (new_name.replace(' ', ''), suffix)
-    else:
-        font.fullname = new_name
-        font.fontname = new_name.replace(' ', '')
+    print("~> Ligaturizing font: %s" % font)
 
-    print("Ligaturizing font %s (%s) as '%s'" %
-          (path.basename(font.path), old_name, new_name))
+    update_font_metadata(font)
+    apply_font_ligatures(liga_font, font)
 
+    print("~> Saving font to: %s" % out_file_path)
+    font.upos += font.uwidth  # BUGFIX
+    font.generate(out_file_path)
+    print("\t~> Saved.\n")
+
+
+def update_font_names(font, in_file_path, out_dir):
+    print("\n~> Updating font names...")
+
+    base_file_name = path.basename(in_file_path)
+    out_file_name = "Liga-%s" % base_file_name
+    out_file_path = path.join(out_dir, out_file_name)
+
+    print("\t~> Input font:")
+    print("\t\tin_file_path: %s" % in_file_path)
+    print("\t\tbase_file_name: %s" % base_file_name)
+    print("\t\tfont.fontname: %s" % font.fontname)
+    print("\t\tfont.fullname: %s" % font.fullname)
+    print("\t\tfont.familyname: %s" % font.familyname)
+    # print("\t\tfont.copyright: %s" % font.copyright)
+
+    font.fullname = "Liga %s" % font.fullname
+    font.fontname = "Liga-%s" % font.fontname
+    font.familyname = "Liga %s" % font.familyname
     font.copyright += COPYRIGHT
-    replace_sfnt(font, 'UniqueID', '%s; Ligaturized' % font.fullname)
-    replace_sfnt(font, 'Preferred Family', new_name)
-    replace_sfnt(font, 'Compatible Full', new_name)
-    replace_sfnt(font, 'Family', new_name)
-    replace_sfnt(font, 'WWS Family', new_name)
+
+    print("\t~> Output font:")
+    print("\t\tout_file_path: %s" % out_file_path)
+    print("\t\tout_file_name: %s" % out_file_name)
+    print("\t\tfont.fontname: %s" % font.fontname)
+    print("\t\tfont.fullname: %s" % font.fullname)
+    print("\t\tfont.familyname: %s" % font.familyname)
+    # print("\t\tfont.copyright: %s" % font.copyright)
+
+    return out_file_path
 
 
-def ligaturize_font(input_font_file, output_dir, ligature_font_file,
-                    output_name, prefix, **kwargs):
-    font = fontforge.open(input_font_file)
+def update_font_metadata(font):
+    print("\n~> Updating font metadata...")
 
-    if not ligature_font_file:
-        ligature_font_file = get_ligature_source(font.fontname)
+    replace_sfnt(font, "Copyright", font.copyright)
+    replace_sfnt(font, "Family", font.familyname)
+    # replace_sfnt(font, "Styles (SubFamily)", font.styles_subfamily)
+    replace_sfnt(font, "UniqueID", "%s; Ligaturized" % font.fullname)
+    replace_sfnt(font, "Fullname", font.fullname)
+    # replace_sfnt(font, "Version", font.version)
+    # replace_sfnt(font, "Trademark", font.trademark)
+    # replace_sfnt(font, "Manufacturer", font.manufacturer)
+    # replace_sfnt(font, "Designer", font.designer)
+    # replace_sfnt(font, "Descriptor", font.descriptor)
+    # replace_sfnt(font, "Vendor URL", font.vendor_url)
+    # replace_sfnt(font, "Designer URL", font.designer_url)
+    # replace_sfnt(font, "License", font.license)
+    # replace_sfnt(font, "License URL", font.license_url)
+    replace_sfnt(font, "Preferred Family", font.familyname)
+    # replace_sfnt(font, "Preferred Styles", font.preferred_styles)
+    replace_sfnt(font, "Compatible Full", font.familyname)
+    replace_sfnt(font, "WWS Family", font.familyname)
+    replace_sfnt(font, "WWS Subfamily", font.fullname)
 
-    if output_name:
-        name = output_name
-    else:
-        name = font.familyname
-    if prefix:
-        name = "%s %s" % (prefix, name)
 
-    update_font_metadata(font, name)
+def apply_font_ligatures(liga_font, font):
+    print("~> Using ligatures from: %s" % liga_font)
 
-    print('    ...using ligatures from %s' % ligature_font_file)
-    firacode = fontforge.open(ligature_font_file)
+    copy_copy_character_glyphs = False
+    scale_character_glyphs_threshold = 0.1
 
-    creator = LigatureCreator(font, firacode, **kwargs)
+    creator = LigatureCreator(font, liga_font,
+                              scale_character_glyphs_threshold,
+                              copy_copy_character_glyphs)
+
     ligature_length = lambda lig: len(lig['chars'])
+
     for lig_spec in sorted(ligatures, key=ligature_length):
         try:
             creator.add_ligature(lig_spec['chars'],
@@ -280,71 +313,45 @@ def ligaturize_font(input_font_file, output_dir, ligature_font_file,
             print('Exception while adding ligature: {}'.format(lig_spec))
             raise
 
-    # Work around a bug in Fontforge where the underline height is subtracted from
-    # the underline width when you call generate().
-    font.upos += font.uwidth
-
-    # Generate font type (TTF or OTF) corresponding to input font extension
-    # (defaults to TTF)
-    if input_font_file[-4:].lower() == '.otf':
-        output_font_type = '.otf'
-    else:
-        output_font_type = '.ttf'
-
-    # Generate font & move to output directory
-    output_font_file = path.join(output_dir, font.fontname + output_font_type)
-    print("    ...saving to '%s' (%s)" % (output_font_file, font.fullname))
-    font.generate(output_font_file)
-
 
 def parse_args():
     from argparse import ArgumentParser
     parser = ArgumentParser()
-    parser.add_argument("input_font_file",
+    parser.add_argument("in_file_path",
                         help="The TTF or OTF font to add ligatures to.")
     parser.add_argument(
-        "--output-dir",
+        "--out-dir",
         help="The directory to save the ligaturized font in. The actual filename"
         " will be automatically generated based on the input font name and"
         " the --prefix and --output-name flags.")
-    parser.add_argument(
-        "--ligature-font-file",
-        type=str,
-        default='',
-        metavar='PATH',
-        help="The file to copy ligatures from. If unspecified, ligaturize will"
-        " attempt to pick a suitable one from fonts/fira/distr/otf/ based on the input"
-        " font's weight.")
-    parser.add_argument(
-        "--copy-character-glyphs",
-        default=False,
-        action='store_true',
-        help="Copy glyphs for (some) individual characters from the ligature"
-        " font as well. This will result in punctuation that matches the"
-        " ligatures more closely, but may not fit in as well with the rest"
-        " of the font.")
-    parser.add_argument(
-        "--scale-character-glyphs-threshold",
-        type=float,
-        default=0.1,
-        metavar='THRESHOLD',
-        help="When copying character glyphs, if they differ in width from the"
-        " width of the input font by at least this much, scale them"
-        " horizontally to match the input font even if this noticeably"
-        " changes their aspect ratio. The default (0.1) means to scale if"
-        " they are at least 10%% wider or narrower. A value of 0 will scale"
-        " all copied character glyphs; a value of 2 effectively disables"
-        " character glyph scaling.")
-    parser.add_argument(
-        "--prefix",
-        type=str,
-        default="Liga",
-        help="String to prefix the name of the generated font with.")
-    parser.add_argument(
-        "--output-name",
-        type=str,
-        default="",
-        help="Name of the generated font. Completely replaces the original.")
+    # parser.add_argument(
+    #     "--ligature-font-file",
+    #     type=str,
+    #     default='',
+    #     metavar='PATH',
+    #     help="The file to copy ligatures from. If unspecified, ligaturize will"
+    #     " attempt to pick a suitable one from fonts/fira/distr/otf/ based on the input"
+    #     " font's weight.")
+    # parser.add_argument(
+    #     "--copy-character-glyphs",
+    #     default=False,
+    #     action='store_true',
+    #     help="Copy glyphs for (some) individual characters from the ligature"
+    #     " font as well. This will result in punctuation that matches the"
+    #     " ligatures more closely, but may not fit in as well with the rest"
+    #     " of the font.")
+    # parser.add_argument(
+    #     "--scale-character-glyphs-threshold",
+    #     type=float,
+    #     default=0.1,
+    #     metavar='THRESHOLD',
+    #     help="When copying character glyphs, if they differ in width from the"
+    #     " width of the input font by at least this much, scale them"
+    #     " horizontally to match the input font even if this noticeably"
+    #     " changes their aspect ratio. The default (0.1) means to scale if"
+    #     " they are at least 10%% wider or narrower. A value of 0 will scale"
+    #     " all copied character glyphs; a value of 2 effectively disables"
+    #     " character glyph scaling.")
     return parser.parse_args()
 
 
